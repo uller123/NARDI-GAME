@@ -61,8 +61,7 @@ def ai_easy(game):
         return True
 
     # If no moves possible, skip turn
-    game.turn = "White" if game.turn == "Black" else "Black"
-    game.dice = []
+    print(f"No moves for {game.turn}. Skipping turn.")
     return False
 
 
@@ -159,7 +158,6 @@ def ai_smart(game):
             game.move(src, dst)
         return True
 
-    # If no moves possible, skip turn
-    game.turn = "White" if game.turn == "Black" else "Black"
-    game.dice = []
+    # If no moves possible, return False
+    print(f"No moves for {game.turn}. Skipping turn.")
     return False

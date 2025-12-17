@@ -47,19 +47,22 @@ class GameState:
 
             # Check if can enter from bar
             if self.turn == "White":
-                enter_point = 24 - dst if 0 <= dst < 24 else None
-                if enter_point is None:
+                # White enters from bar: need to roll 1 to enter point 23, 2 for 22, etc.
+                needed_die = 24 - dst if 0 <= dst < 24 else None
+                if needed_die is None:
                     return False
-                if len(self.points[enter_point]) >= 2 and self.points[enter_point][-1] != self.turn:
+                # Check if point is blocked (2+ opponent checkers)
+                if len(self.points[dst]) >= 2 and self.points[dst][-1] != self.turn:
                     return False
-                return enter_point in self.dice
+                return needed_die in self.dice
             else:
-                enter_point = dst - 1 if 0 <= dst < 24 else None
-                if enter_point is None:
+                # Black enters from bar: need to roll 1 to enter point 0, 2 for 1, etc.
+                needed_die = dst + 1 if 0 <= dst < 24 else None
+                if needed_die is None:
                     return False
-                if len(self.points[enter_point]) >= 2 and self.points[enter_point][-1] != self.turn:
+                if len(self.points[dst]) >= 2 and self.points[dst][-1] != self.turn:
                     return False
-                return enter_point in self.dice
+                return needed_die in self.dice
 
         # Normal move
         if dst < 0 or dst >= 24:
@@ -137,22 +140,33 @@ class GameState:
 
     def move(self, src, dst):
         print(f"Moving from {src} to {dst}")
+
         if src == "bar":
             # Enter from bar
             if self.turn == "White":
-                enter_point = 24 - dst
+                # For white: point 23 needs die 1, point 22 needs die 2, etc.
+                needed_die = 24 - dst
             else:
-                enter_point = dst - 1
+                # For black: point 0 needs die 1, point 1 needs die 2, etc.
+                needed_die = dst + 1
+
+            print(f"Need die {needed_die} to enter from bar to point {dst}")
+
+            # Make sure the die is in dice
+            if needed_die in self.dice:
+                self.dice.remove(needed_die)
+            else:
+                print(f"Error: Die {needed_die} not in dice {self.dice}")
+                return
 
             self.bar[self.turn] -= 1
-            self.dice.remove(dst)
 
             # Hit opponent if single checker
-            if len(self.points[enter_point]) == 1 and self.points[enter_point][-1] != self.turn:
-                hit_color = self.points[enter_point].pop()
+            if len(self.points[dst]) == 1 and self.points[dst][-1] != self.turn:
+                hit_color = self.points[dst].pop()
                 self.bar[hit_color] += 1
 
-            self.points[enter_point].append(self.turn)
+            self.points[dst].append(self.turn)
 
         else:
             # Normal move
@@ -201,12 +215,16 @@ class GameState:
         if self.bar[self.turn] > 0:
             for d in self.dice:
                 if self.turn == "White":
+                    # White can enter from bar to point (24 - d)
                     enter_point = 24 - d
                 else:
+                    # Black can enter from bar to point (d - 1)
                     enter_point = d - 1
 
                 if 0 <= enter_point < 24:
-                    if len(self.points[enter_point]) < 2 or self.points[enter_point][-1] == self.turn:
+                    # Check if point is open (fewer than 2 opponent checkers)
+                    if (len(self.points[enter_point]) < 2 or
+                            self.points[enter_point][-1] == self.turn):
                         return True
             return False
 
@@ -294,6 +312,8 @@ def run_game(screen, game_mode, size):
     moves_count = 0
     ai_thinking = False
     ai_delay = 30  # Frames to wait for AI move
+    ai_delay_counter = 0
+    ai_needs_to_roll = False
 
     # Initial dice roll for white if playing against AI
     if game_mode.startswith("ai"):
@@ -320,9 +340,9 @@ def run_game(screen, game_mode, size):
 
                             # Check if player has any moves
                             if not game.has_any_move():
+                                print(f"No moves available. Turn passed to {game.turn}")
                                 game.turn = "Black" if game.turn == "White" else "White"
                                 game.dice = []
-                                print(f"No moves available. Turn passed to {game.turn}")
                         else:
                             print(f"Dice already rolled: {game.dice}")
 
@@ -335,11 +355,8 @@ def run_game(screen, game_mode, size):
                     print("Game loaded!")
                     # Reset AI thinking state
                     ai_thinking = False
-                    # If it's AI's turn and dice are already rolled, AI should move
-                    if game_mode.startswith("ai") and game.turn == "Black" and game.dice:
-                        print("AI's turn with dice already rolled")
-                        ai_thinking = True
-                        ai_delay_counter = 0
+                    ai_delay_counter = 0
+                    ai_needs_to_roll = False
 
             # Handle mouse clicks for human players
             if (event.type == pygame.MOUSEBUTTONDOWN and
@@ -426,56 +443,86 @@ def run_game(screen, game_mode, size):
                             game.selected = None
                             print(f"Deselected (cannot move to {idx})")
 
-        # AI move logic
-        if (game_mode.startswith("ai") and game.turn == "Black" and
-                game.dice and not ai_thinking and running):
-            print("AI starting to think...")
-            ai_thinking = True
-            ai_delay_counter = 0
-
-        if ai_thinking and running:
-            ai_delay_counter += 1
-            if ai_delay_counter >= ai_delay:
-                moved = False
-                if game_mode == "ai_easy":
-                    moved = ai_easy(game)
-                else:  # ai_smart
-                    moved = ai_smart(game)
-
-                if moved:
-                    print(f"AI moved. Remaining dice: {game.dice}")
-                    # Check for win after AI move
-                    win = game.check_win()
-                    if win:
-                        # Calculate scores
-                        winner_score = game.calculate_score()
-                        loser_score = 1
-
-                        # Save to high scores
-                        loser = "Black" if win == "White" else "White"
-                        save_highscore(win, loser, moves_count, winner_score, loser_score)
-
-                        show_game_over(screen, win, moves_count, width, height)
-                        running = False
-
-                ai_thinking = False
-
-        # Auto-roll dice for AI if no dice and it's AI's turn
-        if (game_mode.startswith("ai") and game.turn == "Black" and
-                not game.dice and not ai_thinking and running):
-            print("AI rolling dice...")
-            game.roll_dice()
-            moves_count += 1
-
-            # Check if AI has any moves
-            if not game.has_any_move():
-                game.turn = "White"
-                game.dice = []
-                print(f"AI has no moves. Turn passed to {game.turn}")
-            else:
-                # AI should move after rolling dice
+        # AI move logic - COMPLETELY REWRITTEN
+        if game_mode.startswith("ai") and game.turn == "Black" and not ai_thinking and running:
+            if not game.dice:
+                # AI needs to roll dice first
+                print("AI needs to roll dice...")
+                ai_needs_to_roll = True
                 ai_thinking = True
                 ai_delay_counter = 0
+            elif game.dice:
+                # AI has dice and should make moves
+                print("AI starting to think with dice...")
+                ai_needs_to_roll = False
+                ai_thinking = True
+                ai_delay_counter = 0
+
+        # AI thinking process
+        if ai_thinking and running:
+            ai_delay_counter += 1
+
+            if ai_delay_counter >= ai_delay:
+                ai_delay_counter = 0
+
+                if ai_needs_to_roll:
+                    # Roll dice for AI
+                    game.roll_dice()
+                    moves_count += 1
+                    ai_needs_to_roll = False
+
+                    # Check if AI has any moves
+                    if not game.has_any_move():
+                        print("AI has no moves after rolling. Passing turn.")
+                        game.turn = "White"
+                        game.dice = []
+                        ai_thinking = False
+                    else:
+                        print(f"AI rolled dice: {game.dice}")
+                        # AI will make moves on next frame
+
+                elif game.dice:
+                    # AI makes a move
+                    moved = False
+                    if game_mode == "ai_easy":
+                        moved = ai_easy(game)
+                    else:  # ai_smart
+                        moved = ai_smart(game)
+
+                    if moved:
+                        print(f"AI moved. Remaining dice: {game.dice}")
+
+                        # Check for win
+                        win = game.check_win()
+                        if win:
+                            # Calculate scores
+                            winner_score = game.calculate_score()
+                            loser_score = 1
+
+                            # Save to high scores
+                            loser = "Black" if win == "White" else "White"
+                            save_highscore(win, loser, moves_count, winner_score, loser_score)
+
+                            show_game_over(screen, win, moves_count, width, height)
+                            running = False
+                            ai_thinking = False
+
+                        # If dice are empty after move, AI is done
+                        if not game.dice:
+                            print("AI finished all moves.")
+                            ai_thinking = False
+                        # If dice still remain, AI will continue on next frame
+
+                    else:
+                        # AI cannot make a move
+                        print("AI cannot make a move. Passing turn.")
+                        game.turn = "White"
+                        game.dice = []
+                        ai_thinking = False
+
+                else:
+                    # No dice, AI should be done
+                    ai_thinking = False
 
         # Draw everything
         draw_board(screen, game, width, height)
@@ -484,7 +531,10 @@ def run_game(screen, game_mode, size):
         # Show AI thinking
         if ai_thinking:
             font = pygame.font.SysFont(None, 36)
-            thinking = font.render("AI Thinking...", True, (255, 255, 0))
+            if ai_needs_to_roll:
+                thinking = font.render("AI Rolling Dice...", True, (255, 255, 0))
+            else:
+                thinking = font.render("AI Thinking...", True, (255, 255, 0))
             screen.blit(thinking, (width // 2 - thinking.get_width() // 2, 20))
 
         pygame.display.flip()

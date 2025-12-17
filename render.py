@@ -61,27 +61,51 @@ def draw_board(screen, game, width, height):
         color = (220, 220, 220) if idx % 2 == 0 else (180, 180, 180)
         pygame.draw.polygon(screen, color, pts)
 
-        # Draw point number for debugging
+        # Draw point number for debugging (optional)
         # font = pygame.font.SysFont(None, 20)
         # text = font.render(str(idx), True, (255, 0, 0))
         # screen.blit(text, (x + 5, height // 2))
 
-    # Highlight possible moves
+    # Highlight possible moves - FIXED VERSION
     if game.selected is not None and game.dice:
         src = game.selected
-        for d in game.dice:
-            if game.turn == "White":
-                dst = src - d
-            else:
-                dst = src + d
 
-            if 0 <= dst < 24 and game.can_move(src, dst):
-                side, col = POINT_LAYOUT[dst]
-                x = (BOARD_MARGIN + col * POINT_W if col < 6
-                     else BOARD_MARGIN + 6 * POINT_W + BAR_WIDTH + (col - 6) * POINT_W)
-                cx = x + POINT_W // 2
-                cy = height // 2
-                pygame.draw.circle(screen, (0, 255, 0, 100), (cx, cy), 8)
+        # Only highlight if source is an integer (not "bar")
+        if isinstance(src, int):
+            for d in game.dice:
+                if game.turn == "White":
+                    dst = src - d
+                else:
+                    dst = src + d
+
+                if 0 <= dst < 24 and game.can_move(src, dst):
+                    side, col = POINT_LAYOUT[dst]
+                    x = (BOARD_MARGIN + col * POINT_W if col < 6
+                         else BOARD_MARGIN + 6 * POINT_W + BAR_WIDTH + (col - 6) * POINT_W)
+                    cx = x + POINT_W // 2
+                    cy = height // 2
+                    pygame.draw.circle(screen, (0, 255, 0, 100), (cx, cy), 8)
+
+        # If selected is "bar", highlight possible entry points
+        elif src == "bar" and game.bar[game.turn] > 0:
+            for d in game.dice:
+                if game.turn == "White":
+                    # White enters from bar: need to roll 1 to enter point 23, 2 for 22, etc.
+                    enter_point = 24 - d
+                else:
+                    # Black enters from bar: need to roll 1 to enter point 0, 2 for 1, etc.
+                    enter_point = d - 1
+
+                if 0 <= enter_point < 24:
+                    # Check if point is open (fewer than 2 opponent checkers)
+                    if (len(game.points[enter_point]) < 2 or
+                            game.points[enter_point][-1] == game.turn):
+                        side, col = POINT_LAYOUT[enter_point]
+                        x = (BOARD_MARGIN + col * POINT_W if col < 6
+                             else BOARD_MARGIN + 6 * POINT_W + BAR_WIDTH + (col - 6) * POINT_W)
+                        cx = x + POINT_W // 2
+                        cy = height // 2
+                        pygame.draw.circle(screen, (0, 255, 0, 100), (cx, cy), 8)
 
     # Draw checkers
     for idx, stack in enumerate(game.points):
@@ -188,9 +212,18 @@ def draw_ui(screen, game, width, height, game_mode, moves_count):
     moves_text = font.render(f"Moves: {moves_count}", True, (255, 255, 255))
     screen.blit(moves_text, (PANEL_X, PANEL_Y + 160))
 
+    # Selected checker info
+    if game.selected is not None:
+        if game.selected == "bar":
+            selected_text = font.render("Selected: Bar", True, (255, 255, 0))
+        else:
+            selected_text = font.render(f"Selected: Point {game.selected}", True, (255, 255, 0))
+        screen.blit(selected_text, (PANEL_X, PANEL_Y + 190))
+
     # Instructions
     instructions = [
         "SPACE - roll dice",
+        "Click - select/move",
         "S - save game",
         "L - load game",
         "ESC - back to menu"
@@ -199,3 +232,14 @@ def draw_ui(screen, game, width, height, game_mode, moves_count):
     for i, instr in enumerate(instructions):
         instr_text = small_font.render(instr, True, (200, 200, 200))
         screen.blit(instr_text, (PANEL_X, height - 150 + i * 25))
+
+    # Status message
+    status_y = height - 30
+    if game.bar[game.turn] > 0:
+        status_text = font.render(f"You have {game.bar[game.turn]} checker(s) on bar!",
+                                  True, (255, 100, 100))
+        screen.blit(status_text, (10, status_y))
+    elif game.all_in_home():
+        status_text = font.render("All checkers in home! You can bear off.",
+                                  True, (100, 255, 100))
+        screen.blit(status_text, (10, status_y))
