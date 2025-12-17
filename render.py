@@ -61,12 +61,7 @@ def draw_board(screen, game, width, height):
         color = (220, 220, 220) if idx % 2 == 0 else (180, 180, 180)
         pygame.draw.polygon(screen, color, pts)
 
-        # Draw point number for debugging (optional)
-        # font = pygame.font.SysFont(None, 20)
-        # text = font.render(str(idx), True, (255, 0, 0))
-        # screen.blit(text, (x + 5, height // 2))
-
-    # Highlight possible moves - FIXED VERSION
+    # Highlight possible moves
     if game.selected is not None and game.dice:
         src = game.selected
 
@@ -78,6 +73,7 @@ def draw_board(screen, game, width, height):
                 else:
                     dst = src + d
 
+                # Check for normal move
                 if 0 <= dst < 24 and game.can_move(src, dst):
                     side, col = POINT_LAYOUT[dst]
                     x = (BOARD_MARGIN + col * POINT_W if col < 6
@@ -144,6 +140,34 @@ def draw_board(screen, game, width, height):
         pygame.draw.circle(screen, (30, 30, 30), (cx, cy), R)
         pygame.draw.circle(screen, (0, 0, 0), (cx, cy), R, 2)
 
+    # Draw bear off zones
+    bear_off_left = BOARD_MARGIN // 2
+    bear_off_right = width - BOARD_MARGIN // 2
+    bear_off_y = height // 2
+
+    # White bear off zone (left)
+    pygame.draw.circle(screen, (200, 200, 200, 100), (bear_off_left, bear_off_y), 25)
+    font = pygame.font.SysFont(None, 20)
+    white_off_text = font.render(f"{game.off['White']}", True, (255, 255, 255))
+    screen.blit(white_off_text, (bear_off_left - white_off_text.get_width() // 2,
+                                 bear_off_y - white_off_text.get_height() // 2))
+
+    # Black bear off zone (right)
+    pygame.draw.circle(screen, (50, 50, 50, 100), (bear_off_right, bear_off_y), 25)
+    black_off_text = font.render(f"{game.off['Black']}", True, (255, 255, 255))
+    screen.blit(black_off_text, (bear_off_right - black_off_text.get_width() // 2,
+                                 bear_off_y - black_off_text.get_height() // 2))
+
+    # Highlight bear off zone if it's the turn and all checkers are home
+    if game.all_in_home() and game.dice and game.turn == "White":
+        pygame.draw.circle(screen, (255, 255, 0, 150), (bear_off_left, bear_off_y), 30, 3)
+        bear_text = font.render("BEAR OFF", True, (255, 255, 0))
+        screen.blit(bear_text, (bear_off_left - bear_text.get_width() // 2, bear_off_y + 30))
+    elif game.all_in_home() and game.dice and game.turn == "Black":
+        pygame.draw.circle(screen, (255, 255, 0, 150), (bear_off_right, bear_off_y), 30, 3)
+        bear_text = font.render("BEAR OFF", True, (255, 255, 0))
+        screen.blit(bear_text, (bear_off_right - bear_text.get_width() // 2, bear_off_y + 30))
+
 
 def point_from_mouse(x, y, width, height):
     left = BOARD_MARGIN
@@ -168,6 +192,25 @@ def point_from_mouse(x, y, width, height):
     bar_y2 = height - BOARD_MARGIN
     if bar_x <= x <= bar_x + BAR_WIDTH and bar_y1 <= y <= bar_y2:
         return "bar"
+
+    return None
+
+
+def check_bear_off_click(x, y, width, height, game):
+    """Check if click is on bear off zone"""
+    bear_off_left = BOARD_MARGIN // 2
+    bear_off_right = width - BOARD_MARGIN // 2
+    bear_off_y = height // 2
+    bear_off_radius = 25
+
+    if game.turn == "White":
+        distance = ((x - bear_off_left) ** 2 + (y - bear_off_y) ** 2) ** 0.5
+        if distance <= bear_off_radius and game.all_in_home():
+            return "bear_off"
+    else:
+        distance = ((x - bear_off_right) ** 2 + (y - bear_off_y) ** 2) ** 0.5
+        if distance <= bear_off_radius and game.all_in_home():
+            return "bear_off"
 
     return None
 
@@ -220,10 +263,21 @@ def draw_ui(screen, game, width, height, game_mode, moves_count):
             selected_text = font.render(f"Selected: Point {game.selected}", True, (255, 255, 0))
         screen.blit(selected_text, (PANEL_X, PANEL_Y + 190))
 
+    # Game status
+    if game.bar[game.turn] > 0:
+        status_text = font.render(f"Checkers on bar: {game.bar[game.turn]}", True, (255, 100, 100))
+        screen.blit(status_text, (10, height - 40))
+    elif game.all_in_home():
+        status_text = font.render("All checkers in home! Click BEAR OFF zone to remove.",
+                                  True, (100, 255, 100))
+        screen.blit(status_text, (10, height - 40))
+
     # Instructions
     instructions = [
         "SPACE - roll dice",
-        "Click - select/move",
+        "Click checker - select",
+        "Click point - move",
+        "Click BEAR OFF - remove",
         "S - save game",
         "L - load game",
         "ESC - back to menu"
@@ -231,15 +285,4 @@ def draw_ui(screen, game, width, height, game_mode, moves_count):
 
     for i, instr in enumerate(instructions):
         instr_text = small_font.render(instr, True, (200, 200, 200))
-        screen.blit(instr_text, (PANEL_X, height - 150 + i * 25))
-
-    # Status message
-    status_y = height - 30
-    if game.bar[game.turn] > 0:
-        status_text = font.render(f"You have {game.bar[game.turn]} checker(s) on bar!",
-                                  True, (255, 100, 100))
-        screen.blit(status_text, (10, status_y))
-    elif game.all_in_home():
-        status_text = font.render("All checkers in home! You can bear off.",
-                                  True, (100, 255, 100))
-        screen.blit(status_text, (10, status_y))
+        screen.blit(instr_text, (PANEL_X, height - 180 + i * 25))

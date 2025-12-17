@@ -1,7 +1,7 @@
 import pygame
 import random
 import sys
-from render import draw_board, point_from_mouse, draw_ui, set_board_constants
+from render import draw_board, point_from_mouse, draw_ui, set_board_constants, check_bear_off_click
 from save_load import save_game, load_game, save_highscore
 from ai import ai_easy, ai_smart
 
@@ -91,6 +91,7 @@ class GameState:
         return True
 
     def can_bear_off(self, src):
+        """Check if checker at src can be borne off"""
         if not self.all_in_home():
             return False
 
@@ -100,41 +101,97 @@ class GameState:
         if self.points[src][-1] != self.turn:
             return False
 
-        # Check if exact roll needed
+        # Check if any checker can be borne off with current dice
         if self.turn == "White":
-            if src + 1 in self.dice:  # Need exact roll to bear off from farthest point
-                return True
-            # Can bear off with higher roll if no checkers behind
-            for i in range(src + 1, 6):
-                if self.points[i] and self.points[i][-1] == self.turn:
-                    return False
-            return any(d > src for d in self.dice)
+            # White bears off from points 0-5
+            if src < 0 or src > 5:
+                return False
+
+            # Check each die
+            for d in self.dice:
+                # Can bear off with exact die
+                if src + 1 == d:
+                    return True
+                # Can bear off with larger die if no checkers behind
+                if src + 1 < d:
+                    # Check if there are any checkers behind
+                    has_checkers_behind = False
+                    for i in range(src + 1, 6):
+                        if self.points[i] and self.points[i][-1] == self.turn:
+                            has_checkers_behind = True
+                            break
+                    if not has_checkers_behind:
+                        return True
         else:
-            if (24 - src) in self.dice:
-                return True
-            for i in range(18, src):
-                if self.points[i] and self.points[i][-1] == self.turn:
-                    return False
-            return any(d > (24 - src) for d in self.dice)
+            # Black bears off from points 18-23
+            if src < 18 or src > 23:
+                return False
+
+            for d in self.dice:
+                # Can bear off with exact die
+                if 24 - src == d:
+                    return True
+                # Can bear off with larger die if no checkers behind
+                if 24 - src < d:
+                    # Check if there are any checkers behind (closer to home edge)
+                    has_checkers_behind = False
+                    for i in range(18, src):
+                        if self.points[i] and self.points[i][-1] == self.turn:
+                            has_checkers_behind = True
+                            break
+                    if not has_checkers_behind:
+                        return True
+
+        return False
 
     def bear_off(self, src):
-        if self.turn == "White":
-            dist = src + 1
-        else:
-            dist = 24 - src
-
-        # Find the smallest die that's >= needed distance
-        usable_dice = [d for d in self.dice if d >= dist]
-        if not usable_dice:
+        """Bear off a checker from src point"""
+        if not self.can_bear_off(src):
+            print(f"Cannot bear off from {src}")
             return False
 
-        die_to_use = min(usable_dice)
+        # Find which die to use
+        die_to_use = None
+        if self.turn == "White":
+            needed = src + 1
+            # Try to use exact die first
+            for d in self.dice:
+                if d == needed:
+                    die_to_use = d
+                    break
+            # If no exact die, use the smallest die that's >= needed
+            if die_to_use is None:
+                usable_dice = [d for d in self.dice if d > needed]
+                if usable_dice:
+                    die_to_use = min(usable_dice)
+        else:
+            needed = 24 - src
+            # Try to use exact die first
+            for d in self.dice:
+                if d == needed:
+                    die_to_use = d
+                    break
+            # If no exact die, use the smallest die that's >= needed
+            if die_to_use is None:
+                usable_dice = [d for d in self.dice if d > needed]
+                if usable_dice:
+                    die_to_use = min(usable_dice)
+
+        if die_to_use is None:
+            print(f"No usable die to bear off from {src}")
+            return False
+
+        # Remove the die and the checker
         self.dice.remove(die_to_use)
         self.points[src].pop()
         self.off[self.turn] += 1
 
+        print(f"Borne off from {src} using die {die_to_use}")
+
+        # If no dice left, switch turn
         if not self.dice:
-            self.turn = "Black" if self.turn == "White" else "Black"
+            self.turn = "Black" if self.turn == "White" else "White"
+            print(f"Turn switched to: {self.turn}")
 
         return True
 
@@ -189,11 +246,13 @@ class GameState:
 
             self.points[dst].append(self.points[src].pop())
 
+        # If no dice left, switch turn
         if not self.dice:
             self.turn = "Black" if self.turn == "White" else "White"
             print(f"Turn switched to: {self.turn}")
 
     def all_in_home(self):
+        """Check if all checkers of current player are in home quadrant"""
         if self.turn == "White":
             home_range = range(0, 6)
         else:
@@ -211,6 +270,7 @@ class GameState:
         return True
 
     def has_any_move(self):
+        """Check if current player has any legal move"""
         # Check moves from bar
         if self.bar[self.turn] > 0:
             for d in self.dice:
@@ -313,7 +373,6 @@ def run_game(screen, game_mode, size):
     ai_thinking = False
     ai_delay = 30  # Frames to wait for AI move
     ai_delay_counter = 0
-    ai_needs_to_roll = False
 
     # Initial dice roll for white if playing against AI
     if game_mode.startswith("ai"):
@@ -356,7 +415,6 @@ def run_game(screen, game_mode, size):
                     # Reset AI thinking state
                     ai_thinking = False
                     ai_delay_counter = 0
-                    ai_needs_to_roll = False
 
             # Handle mouse clicks for human players
             if (event.type == pygame.MOUSEBUTTONDOWN and
@@ -365,6 +423,33 @@ def run_game(screen, game_mode, size):
                      (game_mode.startswith("ai") and game.turn == "White"))):
 
                 mx, my = pygame.mouse.get_pos()
+
+                # First check for bear off click
+                bear_off_click = check_bear_off_click(mx, my, width, height, game)
+                if bear_off_click and game.selected is not None and isinstance(game.selected, int):
+                    # Try to bear off the selected checker
+                    if game.can_bear_off(game.selected):
+                        if game.bear_off(game.selected):
+                            game.selected = None
+
+                            # Check for win
+                            win = game.check_win()
+                            if win:
+                                # Calculate scores
+                                winner_score = game.calculate_score()
+                                loser_score = 1
+
+                                # Save to high scores
+                                loser = "Black" if win == "White" else "White"
+                                save_highscore(win, loser, moves_count, winner_score, loser_score)
+
+                                show_game_over(screen, win, moves_count, width, height)
+                                running = False
+                    else:
+                        print(f"Cannot bear off from point {game.selected}")
+                    continue
+
+                # Normal point/bar click
                 idx = point_from_mouse(mx, my, width, height)
 
                 if idx is None:
@@ -443,18 +528,25 @@ def run_game(screen, game_mode, size):
                             game.selected = None
                             print(f"Deselected (cannot move to {idx})")
 
-        # AI move logic - COMPLETELY REWRITTEN
+        # AI move logic
         if game_mode.startswith("ai") and game.turn == "Black" and not ai_thinking and running:
             if not game.dice:
-                # AI needs to roll dice first
-                print("AI needs to roll dice...")
-                ai_needs_to_roll = True
-                ai_thinking = True
-                ai_delay_counter = 0
+                # AI needs to roll dice
+                print("AI rolling dice...")
+                game.roll_dice()
+                moves_count += 1
+
+                # Check if AI has any moves
+                if not game.has_any_move():
+                    print("AI has no moves. Passing turn.")
+                    game.turn = "White"
+                    game.dice = []
+                else:
+                    # Start AI thinking
+                    ai_thinking = True
+                    ai_delay_counter = 0
             elif game.dice:
-                # AI has dice and should make moves
-                print("AI starting to think with dice...")
-                ai_needs_to_roll = False
+                # AI has dice, start thinking
                 ai_thinking = True
                 ai_delay_counter = 0
 
@@ -465,63 +557,46 @@ def run_game(screen, game_mode, size):
             if ai_delay_counter >= ai_delay:
                 ai_delay_counter = 0
 
-                if ai_needs_to_roll:
-                    # Roll dice for AI
-                    game.roll_dice()
-                    moves_count += 1
-                    ai_needs_to_roll = False
+                # AI makes a move
+                moved = False
+                if game_mode == "ai_easy":
+                    moved = ai_easy(game)
+                else:  # ai_smart
+                    moved = ai_smart(game)
 
-                    # Check if AI has any moves
-                    if not game.has_any_move():
-                        print("AI has no moves after rolling. Passing turn.")
-                        game.turn = "White"
-                        game.dice = []
-                        ai_thinking = False
-                    else:
-                        print(f"AI rolled dice: {game.dice}")
-                        # AI will make moves on next frame
+                if moved:
+                    print(f"AI moved. Remaining dice: {game.dice}")
 
-                elif game.dice:
-                    # AI makes a move
-                    moved = False
-                    if game_mode == "ai_easy":
-                        moved = ai_easy(game)
-                    else:  # ai_smart
-                        moved = ai_smart(game)
+                    # Check for win
+                    win = game.check_win()
+                    if win:
+                        # Calculate scores
+                        winner_score = game.calculate_score()
+                        loser_score = 1
 
-                    if moved:
-                        print(f"AI moved. Remaining dice: {game.dice}")
+                        # Save to high scores
+                        loser = "Black" if win == "White" else "White"
+                        save_highscore(win, loser, moves_count, winner_score, loser_score)
 
-                        # Check for win
-                        win = game.check_win()
-                        if win:
-                            # Calculate scores
-                            winner_score = game.calculate_score()
-                            loser_score = 1
-
-                            # Save to high scores
-                            loser = "Black" if win == "White" else "White"
-                            save_highscore(win, loser, moves_count, winner_score, loser_score)
-
-                            show_game_over(screen, win, moves_count, width, height)
-                            running = False
-                            ai_thinking = False
-
-                        # If dice are empty after move, AI is done
-                        if not game.dice:
-                            print("AI finished all moves.")
-                            ai_thinking = False
-                        # If dice still remain, AI will continue on next frame
-
-                    else:
-                        # AI cannot make a move
-                        print("AI cannot make a move. Passing turn.")
-                        game.turn = "White"
-                        game.dice = []
+                        show_game_over(screen, win, moves_count, width, height)
+                        running = False
                         ai_thinking = False
 
+                    # If dice are empty after move, AI is done
+                    if not game.dice:
+                        print("AI finished all moves.")
+                        ai_thinking = False
+                    # If dice still remain and AI can move, continue
+                    elif game.has_any_move():
+                        print("AI continues thinking...")
+                    else:
+                        print("AI cannot move with remaining dice.")
+                        ai_thinking = False
                 else:
-                    # No dice, AI should be done
+                    # AI cannot make a move
+                    print("AI cannot make a move. Passing turn.")
+                    game.turn = "White"
+                    game.dice = []
                     ai_thinking = False
 
         # Draw everything
@@ -531,10 +606,7 @@ def run_game(screen, game_mode, size):
         # Show AI thinking
         if ai_thinking:
             font = pygame.font.SysFont(None, 36)
-            if ai_needs_to_roll:
-                thinking = font.render("AI Rolling Dice...", True, (255, 255, 0))
-            else:
-                thinking = font.render("AI Thinking...", True, (255, 255, 0))
+            thinking = font.render("AI Thinking...", True, (255, 255, 0))
             screen.blit(thinking, (width // 2 - thinking.get_width() // 2, 20))
 
         pygame.display.flip()
