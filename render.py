@@ -1,69 +1,58 @@
 import pygame
+import json
 
-
-WIDTH, HEIGHT = 800, 500
-
+# Global constants that will be set based on screen size
 BOARD_MARGIN = 30
 BAR_WIDTH = 60
-
 POINT_W = 35
 POINT_H = 180
-
 R = 12
 GAP = 3
 
-# пункт → (side, column)
-# side: "bottom" / "top"
-POINT_LAYOUT = {
-    # низ: справа → влево (1–12)
-    0:  ("bottom", 11),
-    1:  ("bottom", 10),
-    2:  ("bottom", 9),
-    3:  ("bottom", 8),
-    4:  ("bottom", 7),
-    5:  ("bottom", 6),
-    6:  ("bottom", 5),
-    7:  ("bottom", 4),
-    8:  ("bottom", 3),
-    9:  ("bottom", 2),
-    10: ("bottom", 1),
-    11: ("bottom", 0),
 
-    # верх: слева → вправо (13–24)
-    12: ("top", 0),
-    13: ("top", 1),
-    14: ("top", 2),
-    15: ("top", 3),
-    16: ("top", 4),
-    17: ("top", 5),
-    18: ("top", 6),
-    19: ("top", 7),
-    20: ("top", 8),
-    21: ("top", 9),
-    22: ("top", 10),
-    23: ("top", 11),
+def set_board_constants(width, height):
+    """Calculate board constants based on screen size"""
+    global BOARD_MARGIN, BAR_WIDTH, POINT_W, POINT_H, R, GAP
+
+    BOARD_MARGIN = int(width * 0.0375)  # ~30 for 800
+    BAR_WIDTH = int(width * 0.075)  # ~60 for 800
+    POINT_W = int(width * 0.04375)  # ~35 for 800
+    POINT_H = int(height * 0.36)  # ~180 for 500
+    R = int(min(width, height) * 0.015)  # ~12
+    GAP = int(min(width, height) * 0.00375)  # ~3
+
+
+# пункт → (side, column)
+POINT_LAYOUT = {
+    0: ("bottom", 11), 1: ("bottom", 10), 2: ("bottom", 9), 3: ("bottom", 8),
+    4: ("bottom", 7), 5: ("bottom", 6), 6: ("bottom", 5), 7: ("bottom", 4),
+    8: ("bottom", 3), 9: ("bottom", 2), 10: ("bottom", 1), 11: ("bottom", 0),
+    12: ("top", 0), 13: ("top", 1), 14: ("top", 2), 15: ("top", 3),
+    16: ("top", 4), 17: ("top", 5), 18: ("top", 6), 19: ("top", 7),
+    20: ("top", 8), 21: ("top", 9), 22: ("top", 10), 23: ("top", 11),
 }
 
 
-def draw_board(screen, game):
+def draw_board(screen, game, width, height):
     screen.fill((40, 120, 110))
 
+    # Draw board border
     pygame.draw.rect(
         screen, (0, 0, 0),
         (BOARD_MARGIN, BOARD_MARGIN,
-         WIDTH - 2 * BOARD_MARGIN,
-         HEIGHT - 2 * BOARD_MARGIN), 3
+         width - 2 * BOARD_MARGIN,
+         height - 2 * BOARD_MARGIN), 3
     )
 
     left = BOARD_MARGIN
     right = BOARD_MARGIN + 6 * POINT_W + BAR_WIDTH
 
-    # --- треугольники ---
+    # Draw triangles (points)
     for idx, (side, col) in POINT_LAYOUT.items():
         x = left + col * POINT_W if col < 6 else right + (col - 6) * POINT_W
 
         if side == "bottom":
-            y = HEIGHT - BOARD_MARGIN
+            y = height - BOARD_MARGIN
             pts = [(x, y), (x + POINT_W, y), (x + POINT_W // 2, y - POINT_H)]
         else:
             y = BOARD_MARGIN
@@ -71,8 +60,13 @@ def draw_board(screen, game):
 
         color = (220, 220, 220) if idx % 2 == 0 else (180, 180, 180)
         pygame.draw.polygon(screen, color, pts)
-    
-    # подсветка возможных ходов
+
+        # Draw point number for debugging
+        # font = pygame.font.SysFont(None, 20)
+        # text = font.render(str(idx), True, (255, 0, 0))
+        # screen.blit(text, (x + 5, height // 2))
+
+    # Highlight possible moves
     if game.selected is not None and game.dice:
         src = game.selected
         for d in game.dice:
@@ -84,22 +78,23 @@ def draw_board(screen, game):
             if 0 <= dst < 24 and game.can_move(src, dst):
                 side, col = POINT_LAYOUT[dst]
                 x = (BOARD_MARGIN + col * POINT_W if col < 6
-                    else BOARD_MARGIN + 6 * POINT_W + BAR_WIDTH + (col - 6) * POINT_W)
+                     else BOARD_MARGIN + 6 * POINT_W + BAR_WIDTH + (col - 6) * POINT_W)
                 cx = x + POINT_W // 2
-                cy = HEIGHT // 2
-                pygame.draw.circle(screen, (0, 255, 0), (cx, cy), 6)
+                cy = height // 2
+                pygame.draw.circle(screen, (0, 255, 0, 100), (cx, cy), 8)
 
-    # --- шашки ---
+    # Draw checkers
     for idx, stack in enumerate(game.points):
         if not stack:
             continue
 
         side, col = POINT_LAYOUT[idx]
-        cx = (left + col * POINT_W if col < 6 else right + (col - 6) * POINT_W) + POINT_W // 2
+        cx = (left + col * POINT_W if col < 6
+              else right + (col - 6) * POINT_W) + POINT_W // 2
 
         for i, color in enumerate(stack):
             if side == "bottom":
-                cy = HEIGHT - BOARD_MARGIN - R - i * (2 * R + GAP)
+                cy = height - BOARD_MARGIN - R - i * (2 * R + GAP)
             else:
                 cy = BOARD_MARGIN + R + i * (2 * R + GAP)
 
@@ -107,7 +102,26 @@ def draw_board(screen, game):
             pygame.draw.circle(screen, c, (cx, cy), R)
             pygame.draw.circle(screen, (0, 0, 0), (cx, cy), R, 2)
 
-def point_from_mouse(x, y):
+    # Draw bar (middle)
+    bar_x = left + 6 * POINT_W
+    pygame.draw.rect(screen, (80, 80, 80),
+                     (bar_x, BOARD_MARGIN, BAR_WIDTH, height - 2 * BOARD_MARGIN))
+
+    # Draw checkers on bar
+    for i in range(game.bar["White"]):
+        cx = bar_x + BAR_WIDTH // 2
+        cy = height // 2 - 20 - i * (2 * R + 5)
+        pygame.draw.circle(screen, (240, 240, 240), (cx, cy), R)
+        pygame.draw.circle(screen, (0, 0, 0), (cx, cy), R, 2)
+
+    for i in range(game.bar["Black"]):
+        cx = bar_x + BAR_WIDTH // 2
+        cy = height // 2 + 20 + i * (2 * R + 5)
+        pygame.draw.circle(screen, (30, 30, 30), (cx, cy), R)
+        pygame.draw.circle(screen, (0, 0, 0), (cx, cy), R, 2)
+
+
+def point_from_mouse(x, y, width, height):
     left = BOARD_MARGIN
     right = BOARD_MARGIN + 6 * POINT_W + BAR_WIDTH
 
@@ -115,40 +129,73 @@ def point_from_mouse(x, y):
         px = left + col * POINT_W if col < 6 else right + (col - 6) * POINT_W
 
         if side == "bottom":
-            py1 = HEIGHT - BOARD_MARGIN - POINT_H
-            py2 = HEIGHT - BOARD_MARGIN
+            py1 = height - BOARD_MARGIN - POINT_H
+            py2 = height - BOARD_MARGIN
         else:
             py1 = BOARD_MARGIN
             py2 = BOARD_MARGIN + POINT_H
 
         if px <= x <= px + POINT_W and py1 <= y <= py2:
             return idx
+
+    # Check bar area
+    bar_x = left + 6 * POINT_W
+    bar_y1 = BOARD_MARGIN
+    bar_y2 = height - BOARD_MARGIN
+    if bar_x <= x <= bar_x + BAR_WIDTH and bar_y1 <= y <= bar_y2:
+        return "bar"
+
     return None
 
-def draw_ui(screen, game):
-    font = pygame.font.SysFont(None, 28)  # ← ВОТ ЭТОГО НЕ ХВАТАЛО
 
-    PANEL_X = WIDTH - 220   # правая панель
+def draw_ui(screen, game, width, height, game_mode, moves_count):
+    font = pygame.font.SysFont(None, 28)
+    small_font = pygame.font.SysFont(None, 22)
+
+    PANEL_X = width - 220
     PANEL_Y = 40
 
-    # чей ход
-    turn_text = font.render(f"Turn: {game.turn}", True, (255, 255, 255))
-    screen.blit(turn_text, (PANEL_X, PANEL_Y))
+    # Game mode
+    mode_text = font.render(f"Mode: {game_mode}", True, (255, 255, 255))
+    screen.blit(mode_text, (PANEL_X, PANEL_Y))
 
+    # Turn
+    turn_color = (240, 240, 240) if game.turn == "White" else (30, 30, 30)
+    turn_bg = (100, 100, 100) if game.turn == "White" else (200, 200, 200)
+    pygame.draw.rect(screen, turn_bg, (PANEL_X, PANEL_Y + 30, 150, 30), border_radius=5)
+    turn_text = font.render(f"Turn: {game.turn}", True, turn_color)
+    screen.blit(turn_text, (PANEL_X + 10, PANEL_Y + 35))
 
+    # Dice
     if game.dice:
-        dice_text = font.render(
-            "Dice: " + " ".join(map(str, game.dice)),
-            True, (255, 255, 255)
-        )
+        dice_text = font.render("Dice: " + " ".join(map(str, game.dice)), True, (255, 255, 255))
+        screen.blit(dice_text, (PANEL_X, PANEL_Y + 70))
     else:
-        dice_text = font.render("Press SPACE", True, (255, 200, 200))
+        dice_text = font.render("Press SPACE to roll", True, (255, 200, 200))
+        screen.blit(dice_text, (PANEL_X, PANEL_Y + 70))
 
-    screen.blit(dice_text, (PANEL_X, PANEL_Y + 40))
+    # Off board
+    off_text = font.render(f"Off: W {game.off['White']}  B {game.off['Black']}",
+                           True, (255, 255, 255))
+    screen.blit(off_text, (PANEL_X, PANEL_Y + 100))
 
-    off_text = font.render(
-    f"Off: W {game.off['White']}  B {game.off['Black']}",
-    True, (255, 255, 255)
-    )
-    screen.blit(off_text, (PANEL_X, PANEL_Y + 80))
+    # Bar
+    bar_text = font.render(f"Bar: W {game.bar['White']}  B {game.bar['Black']}",
+                           True, (255, 255, 255))
+    screen.blit(bar_text, (PANEL_X, PANEL_Y + 130))
 
+    # Moves count
+    moves_text = font.render(f"Moves: {moves_count}", True, (255, 255, 255))
+    screen.blit(moves_text, (PANEL_X, PANEL_Y + 160))
+
+    # Instructions
+    instructions = [
+        "SPACE - roll dice",
+        "S - save game",
+        "L - load game",
+        "ESC - back to menu"
+    ]
+
+    for i, instr in enumerate(instructions):
+        instr_text = small_font.render(instr, True, (200, 200, 200))
+        screen.blit(instr_text, (PANEL_X, height - 150 + i * 25))
