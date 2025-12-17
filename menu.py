@@ -1,37 +1,25 @@
-from Game import *
-from GameControl import *
+import pygame
+from game import run_game
 
+WIDTH, HEIGHT = 900, 600
 
-def start_menu():
-    pygame.init()
+def main_menu():
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("Nardi")
+
+    font = pygame.font.SysFont(None, 48)
     clock = pygame.time.Clock()
-    screen = pygame.display.set_mode((600, 600))
-    back_ground = pygame.transform.scale(pygame.image.load("Images/сизо.png"), (1280 // 2, 720))
-    star_game_button = pygame.transform.scale(pygame.image.load("Images/кнопкаНачатьИгру.png"), (448 * 0.6, 99 * 0.6))
-    star_game_button_rect = star_game_button.get_rect(topleft=(180, 300))
-    win_black_image = pygame.transform.scale(pygame.image.load("Images/черныйИгрок.png"), (720, 720))
-    win_white_image = pygame.transform.scale(pygame.image.load("Images/белыйИгрок.png"), (720, 720))
-    running = True
-    while running:
-        pygame.display.update()
-        screen.blit(back_ground, (-20, -100))
-        screen.blit(star_game_button, (180, 300))
 
-        mouse = pygame.mouse.get_pos()
-        if star_game_button_rect.collidepoint(mouse) and pygame.mouse.get_pressed()[0]:
-            win_color = start_game(screen, clock)
-            if win_color == "Black":
-                back_ground = win_black_image
-            if win_color == "White":
-                back_ground = win_white_image
+    while True:
+        screen.fill((30, 30, 30))
+        text = font.render("Press ENTER to Start", True, (240, 240, 240))
+        screen.blit(text, (WIDTH//2 - text.get_width()//2, HEIGHT//2))
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit()
-                quit()
+                return
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+                run_game(screen)
 
+        pygame.display.flip()
         clock.tick(60)
-
-
-if __name__ == "__main__":
-    start_menu()
