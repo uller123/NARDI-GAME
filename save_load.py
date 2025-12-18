@@ -28,28 +28,22 @@ def load_game(game):
         with open(SAVE_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        # Load points
         if "points" in data:
-            # Convert string colors back to proper format if needed
             for i in range(len(data["points"])):
                 if data["points"][i]:
-                    # Ensure all elements are strings
                     data["points"][i] = [str(checker) for checker in data["points"][i]]
             game.points = data["points"]
 
-        # Load other data
         if "turn" in data:
             game.turn = str(data["turn"])
 
         if "dice" in data:
-            # Ensure dice is a list of integers
             if isinstance(data["dice"], list):
                 game.dice = [int(d) for d in data["dice"]]
             else:
                 game.dice = []
 
         if "bar" in data:
-            # Ensure bar has both colors
             game.bar = {"White": 0, "Black": 0}
             if isinstance(data["bar"], dict):
                 for color in ["White", "Black"]:
@@ -57,7 +51,6 @@ def load_game(game):
                         game.bar[color] = int(data["bar"][color])
 
         if "off" in data:
-            # Ensure off has both colors
             game.off = {"White": 0, "Black": 0}
             if isinstance(data["off"], dict):
                 for color in ["White", "Black"]:
@@ -65,7 +58,6 @@ def load_game(game):
                         game.off[color] = int(data["off"][color])
 
         if "selected" in data:
-            # Handle "bar" string or None
             if data["selected"] == "bar":
                 game.selected = "bar"
             elif data["selected"] is not None:
@@ -98,10 +90,8 @@ def save_highscore(winner, loser, moves, winner_score, loser_score):
             "loser_score": loser_score
         })
 
-        # Sort by moves (fewer moves = better)
         scores.sort(key=lambda x: x["moves"])
 
-        # Keep only top 20
         scores = scores[:20]
 
         with open(HIGHSCORES_FILE, "w") as f:

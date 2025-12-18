@@ -33,11 +33,9 @@ def show_game_modes(screen):
     while True:
         screen.fill((30, 30, 30))
 
-        # Title
         title = title_font.render("Select Game Mode", True, (240, 240, 240))
         screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 50))
 
-        # Draw buttons
         for i, button in enumerate(buttons):
             x = WIDTH // 2 - 150
             y = 150 + i * 80
@@ -80,11 +78,9 @@ def show_board_size(screen):
     while True:
         screen.fill((30, 30, 30))
 
-        # Title
         title = title_font.render("Select Board Size", True, (240, 240, 240))
         screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 50))
 
-        # Draw buttons
         for i, button in enumerate(buttons):
             x = WIDTH // 2 - 150
             y = 150 + i * 80
@@ -122,11 +118,9 @@ def show_high_scores(screen):
     while True:
         screen.fill((30, 30, 30))
 
-        # Title
         title = title_font.render("High Scores", True, (240, 240, 240))
         screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 50))
 
-        # Display scores
         y = 120
         if not scores:
             no_scores = font.render("No scores yet!", True, (200, 200, 200))
@@ -137,7 +131,6 @@ def show_high_scores(screen):
                 score_surf = font.render(score_text, True, (240, 240, 240))
                 screen.blit(score_surf, (WIDTH // 2 - score_surf.get_width() // 2, y + i * 40))
 
-        # Back button
         back_rect = pygame.Rect(WIDTH // 2 - 75, HEIGHT - 100, 150, 50)
         is_hovered = back_rect.collidepoint(pygame.mouse.get_pos())
         draw_button(screen, "Back", back_rect.x, back_rect.y, back_rect.width, back_rect.height,
@@ -171,11 +164,10 @@ def main_menu():
     while True:
         screen.fill((30, 30, 30))
 
-        # Title
         title = title_font.render("NARDI", True, (240, 240, 240))
         screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 80))
 
-        # Draw buttons
+
         for i, button in enumerate(buttons):
             x = WIDTH // 2 - 100
             y = 200 + i * 80

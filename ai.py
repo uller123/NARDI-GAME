@@ -6,9 +6,7 @@ def ai_easy(game):
     if not game.dice:
         return False
 
-    # First, check if there are checkers on bar
     if game.bar[game.turn] > 0:
-        # Try to enter from bar
         possible_entries = []
         for d in game.dice:
             if game.turn == "White":
@@ -26,7 +24,6 @@ def ai_easy(game):
             game.move("bar", dst)
             return True
 
-    # Try to find all possible normal moves
     possible_moves = []
     for src in range(24):
         if game.points[src] and game.points[src][-1] == game.turn:
@@ -39,7 +36,6 @@ def ai_easy(game):
                 if 0 <= dst < 24 and game.can_move(src, dst):
                     possible_moves.append((src, dst, d))
 
-    # Check bearing off
     if game.all_in_home():
         for src in range(24):
             if game.points[src] and game.points[src][-1] == game.turn:
@@ -60,7 +56,6 @@ def ai_easy(game):
             game.move(src, dst)
         return True
 
-    # If no moves possible, skip turn
     print(f"No moves for {game.turn}. Skipping turn.")
     return False
 
@@ -70,9 +65,7 @@ def ai_smart(game):
     if not game.dice:
         return False
 
-    # First, check if there are checkers on bar
     if game.bar[game.turn] > 0:
-        # Try to enter from bar
         possible_entries = []
         for d in game.dice:
             if game.turn == "White":
@@ -92,7 +85,6 @@ def ai_smart(game):
             game.move("bar", dst)
             return True
 
-    # Try to find all possible moves with weights
     possible_moves = []
     for src in range(24):
         if game.points[src] and game.points[src][-1] == game.turn:
@@ -105,34 +97,29 @@ def ai_smart(game):
                 if 0 <= dst < 24 and game.can_move(src, dst):
                     weight = 0
 
-                    # Weight for hitting opponent
                     if (len(game.points[dst]) == 1 and
                             game.points[dst][-1] != game.turn):
                         weight += 40
 
-                    # Weight for making a point (2+ checkers)
                     if len(game.points[src]) > 1 and len(game.points[dst]) == 0:
                         weight += 25
 
-                    # Weight for moving from danger (single checker)
                     if len(game.points[src]) == 1:
                         weight += 20
 
-                    # Weight for moving towards home
                     if game.turn == "White":
-                        if dst < 6:  # Moving into home
+                        if dst < 6: 
                             weight += 15
-                        elif dst < src:  # Moving left (towards home)
+                        elif dst < src: 
                             weight += 10
                     else:
-                        if dst >= 18:  # Moving into home
+                        if dst >= 18:  
                             weight += 15
-                        elif dst > src:  # Moving right (towards home)
+                        elif dst > src:  
                             weight += 10
 
                     possible_moves.append((src, dst, d, weight))
 
-    # Check bearing off
     if game.all_in_home():
         for src in range(24):
             if game.points[src] and game.points[src][-1] == game.turn:
@@ -140,7 +127,7 @@ def ai_smart(game):
                     for d in game.dice:
                         if game.turn == "White":
                             if src - d < 0:
-                                weight = 60  # High priority to bear off
+                                weight = 60 
                                 possible_moves.append((src, -1, d, weight))
                         else:
                             if src + d > 23:
@@ -148,7 +135,6 @@ def ai_smart(game):
                                 possible_moves.append((src, 24, d, weight))
 
     if possible_moves:
-        # Choose move with highest weight
         possible_moves.sort(key=lambda x: x[3], reverse=True)
         src, dst, die, _ = possible_moves[0]
 

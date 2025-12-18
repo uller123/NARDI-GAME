@@ -1,1 +1,9 @@
-{}
+[
+  {
+    "winner": "White",
+    "loser": "Black",
+    "moves": 30,
+    "winner_score": 1,
+    "loser_score": 0
+  }
+]

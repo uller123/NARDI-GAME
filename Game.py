@@ -8,18 +8,18 @@ from ai import ai_easy, ai_smart
 
 class GameState:
     def __init__(self, width, height):
-        self.points = [[] for _ in range(24)]
-        self.turn = "White"
-        self.dice = []
-        self.selected = None
-        self.bar = {"White": 0, "Black": 0}
-        self.off = {"White": 0, "Black": 0}
+        self.points = [[] for _ in range(24)]   # пункты доски
+        self.turn = "White"                     # текущий ход
+        self.dice = []                          # кубики
+        self.selected = None                    # выбранная шашка
+        self.bar = {"White": 0, "Black": 0}     # выбитые шашки
+        self.off = {"White": 0, "Black": 0}     # вынесенные шашки
         self.width = width
         self.height = height
         self._init_position()
 
     def _init_position(self):
-        # Standard backgammon setup
+        """Начальная расстановка шашек"""
         self.points[0] = ["Black"] * 2
         self.points[5] = ["White"] * 5
         self.points[7] = ["White"] * 3
@@ -30,291 +30,140 @@ class GameState:
         self.points[23] = ["White"] * 2
 
     def roll_dice(self):
-        if not self.dice:  # Only roll if dice are empty
+        """Бросок кубиков"""
+        if not self.dice:
             d1, d2 = random.randint(1, 6), random.randint(1, 6)
             self.dice = [d1, d2] if d1 != d2 else [d1] * 4
-            print(f"Dice rolled: {self.dice}")
         return self.dice
 
     def can_move(self, src, dst):
+        """Проверка допустимости хода"""
         if not self.dice:
             return False
 
-        # If checker is on bar
+        # вход с бара
         if src == "bar":
             if self.bar[self.turn] == 0:
                 return False
 
-            # Check if can enter from bar
-            if self.turn == "White":
-                # White enters from bar: need to roll 1 to enter point 23, 2 for 22, etc.
-                needed_die = 24 - dst if 0 <= dst < 24 else None
-                if needed_die is None:
-                    return False
-                # Check if point is blocked (2+ opponent checkers)
-                if len(self.points[dst]) >= 2 and self.points[dst][-1] != self.turn:
-                    return False
-                return needed_die in self.dice
-            else:
-                # Black enters from bar: need to roll 1 to enter point 0, 2 for 1, etc.
-                needed_die = dst + 1 if 0 <= dst < 24 else None
-                if needed_die is None:
-                    return False
-                if len(self.points[dst]) >= 2 and self.points[dst][-1] != self.turn:
-                    return False
-                return needed_die in self.dice
+            needed = 24 - dst if self.turn == "White" else dst + 1
+            if needed not in self.dice:
+                return False
 
-        # Normal move
+            if len(self.points[dst]) >= 2 and self.points[dst][-1] != self.turn:
+                return False
+
+            return True
+
+        # обычный ход
         if dst < 0 or dst >= 24:
             return False
-        if not self.points[src]:
+        if not self.points[src] or self.points[src][-1] != self.turn:
             return False
-        if self.points[src][-1] != self.turn:
-            return False
-
-        # Check if any checkers on bar
         if self.bar[self.turn] > 0:
             return False
 
-        if self.turn == "White":
-            dist = src - dst
-        else:
-            dist = dst - src
-
+        dist = src - dst if self.turn == "White" else dst - src
         if dist <= 0 or dist not in self.dice:
             return False
 
-        # Check if destination is blocked
         if len(self.points[dst]) >= 2 and self.points[dst][-1] != self.turn:
             return False
 
         return True
 
+    def move(self, src, dst):
+        """Выполнение хода"""
+        if src == "bar":
+            needed = 24 - dst if self.turn == "White" else dst + 1
+            if needed not in self.dice:
+                return
+            self.dice.remove(needed)
+            self.bar[self.turn] -= 1
+        else:
+            dist = src - dst if self.turn == "White" else dst - src
+            if dist not in self.dice:
+                return
+            self.dice.remove(dist)
+            self.points[src].pop()
+
+        # выбивание
+        if len(self.points[dst]) == 1 and self.points[dst][-1] != self.turn:
+            hit = self.points[dst].pop()
+            self.bar[hit] += 1
+
+        self.points[dst].append(self.turn)
+
+        if not self.dice:
+            self.turn = "Black" if self.turn == "White" else "White"
+
+    def all_in_home(self):
+        """Все ли шашки в доме"""
+        home = range(0, 6) if self.turn == "White" else range(18, 24)
+        if self.bar[self.turn] > 0:
+            return False
+        for i in range(24):
+            if i not in home and self.points[i] and self.points[i][-1] == self.turn:
+                return False
+        return True
+
     def can_bear_off(self, src):
-        """Check if checker at src can be borne off"""
+        """Можно ли вынести шашку"""
         if not self.all_in_home():
             return False
-
-        if not self.points[src]:
+        if not self.points[src] or self.points[src][-1] != self.turn:
             return False
 
-        if self.points[src][-1] != self.turn:
-            return False
-
-        # Check if any checker can be borne off with current dice
-        if self.turn == "White":
-            # White bears off from points 0-5
-            if src < 0 or src > 5:
-                return False
-
-            # Check each die
-            for d in self.dice:
-                # Can bear off with exact die
-                if src + 1 == d:
-                    return True
-                # Can bear off with larger die if no checkers behind
-                if src + 1 < d:
-                    # Check if there are any checkers behind
-                    has_checkers_behind = False
-                    for i in range(src + 1, 6):
-                        if self.points[i] and self.points[i][-1] == self.turn:
-                            has_checkers_behind = True
-                            break
-                    if not has_checkers_behind:
-                        return True
-        else:
-            # Black bears off from points 18-23
-            if src < 18 or src > 23:
-                return False
-
-            for d in self.dice:
-                # Can bear off with exact die
-                if 24 - src == d:
-                    return True
-                # Can bear off with larger die if no checkers behind
-                if 24 - src < d:
-                    # Check if there are any checkers behind (closer to home edge)
-                    has_checkers_behind = False
-                    for i in range(18, src):
-                        if self.points[i] and self.points[i][-1] == self.turn:
-                            has_checkers_behind = True
-                            break
-                    if not has_checkers_behind:
-                        return True
-
-        return False
+        need = src + 1 if self.turn == "White" else 24 - src
+        return any(d >= need for d in self.dice)
 
     def bear_off(self, src):
-        """Bear off a checker from src point"""
-        if not self.can_bear_off(src):
-            print(f"Cannot bear off from {src}")
+        """Вынос шашки"""
+        need = src + 1 if self.turn == "White" else 24 - src
+        usable = [d for d in self.dice if d >= need]
+        if not usable:
             return False
 
-        # Find which die to use
-        die_to_use = None
-        if self.turn == "White":
-            needed = src + 1
-            # Try to use exact die first
-            for d in self.dice:
-                if d == needed:
-                    die_to_use = d
-                    break
-            # If no exact die, use the smallest die that's >= needed
-            if die_to_use is None:
-                usable_dice = [d for d in self.dice if d > needed]
-                if usable_dice:
-                    die_to_use = min(usable_dice)
-        else:
-            needed = 24 - src
-            # Try to use exact die first
-            for d in self.dice:
-                if d == needed:
-                    die_to_use = d
-                    break
-            # If no exact die, use the smallest die that's >= needed
-            if die_to_use is None:
-                usable_dice = [d for d in self.dice if d > needed]
-                if usable_dice:
-                    die_to_use = min(usable_dice)
-
-        if die_to_use is None:
-            print(f"No usable die to bear off from {src}")
-            return False
-
-        # Remove the die and the checker
-        self.dice.remove(die_to_use)
+        self.dice.remove(min(usable))
         self.points[src].pop()
         self.off[self.turn] += 1
 
-        print(f"Borne off from {src} using die {die_to_use}")
-
-        # If no dice left, switch turn
         if not self.dice:
             self.turn = "Black" if self.turn == "White" else "White"
-            print(f"Turn switched to: {self.turn}")
-
-        return True
-
-    def move(self, src, dst):
-        print(f"Moving from {src} to {dst}")
-
-        if src == "bar":
-            # Enter from bar
-            if self.turn == "White":
-                # For white: point 23 needs die 1, point 22 needs die 2, etc.
-                needed_die = 24 - dst
-            else:
-                # For black: point 0 needs die 1, point 1 needs die 2, etc.
-                needed_die = dst + 1
-
-            print(f"Need die {needed_die} to enter from bar to point {dst}")
-
-            # Make sure the die is in dice
-            if needed_die in self.dice:
-                self.dice.remove(needed_die)
-            else:
-                print(f"Error: Die {needed_die} not in dice {self.dice}")
-                return
-
-            self.bar[self.turn] -= 1
-
-            # Hit opponent if single checker
-            if len(self.points[dst]) == 1 and self.points[dst][-1] != self.turn:
-                hit_color = self.points[dst].pop()
-                self.bar[hit_color] += 1
-
-            self.points[dst].append(self.turn)
-
-        else:
-            # Normal move
-            if self.turn == "White":
-                dist = src - dst
-            else:
-                dist = dst - src
-
-            # Make sure the die is in dice
-            if dist in self.dice:
-                self.dice.remove(dist)
-            else:
-                print(f"Error: Die {dist} not in dice {self.dice}")
-                return
-
-            # Hit opponent
-            if len(self.points[dst]) == 1 and self.points[dst][-1] != self.turn:
-                hit_color = self.points[dst].pop()
-                self.bar[hit_color] += 1
-
-            self.points[dst].append(self.points[src].pop())
-
-        # If no dice left, switch turn
-        if not self.dice:
-            self.turn = "Black" if self.turn == "White" else "White"
-            print(f"Turn switched to: {self.turn}")
-
-    def all_in_home(self):
-        """Check if all checkers of current player are in home quadrant"""
-        if self.turn == "White":
-            home_range = range(0, 6)
-        else:
-            home_range = range(18, 24)
-
-        # Check if any checkers on bar
-        if self.bar[self.turn] > 0:
-            return False
-
-        # Check if all checkers in home quadrant
-        for i in range(24):
-            if i not in home_range and self.points[i] and self.points[i][-1] == self.turn:
-                return False
-
         return True
 
     def has_any_move(self):
-        """Check if current player has any legal move"""
-        # Check moves from bar
+        """Есть ли хоть один ход"""
         if self.bar[self.turn] > 0:
             for d in self.dice:
-                if self.turn == "White":
-                    # White can enter from bar to point (24 - d)
-                    enter_point = 24 - d
-                else:
-                    # Black can enter from bar to point (d - 1)
-                    enter_point = d - 1
-
-                if 0 <= enter_point < 24:
-                    # Check if point is open (fewer than 2 opponent checkers)
-                    if (len(self.points[enter_point]) < 2 or
-                            self.points[enter_point][-1] == self.turn):
+                dst = 24 - d if self.turn == "White" else d - 1
+                if 0 <= dst < 24:
+                    if len(self.points[dst]) < 2 or self.points[dst][-1] == self.turn:
                         return True
             return False
 
-        # Check normal moves
         for src in range(24):
             if self.points[src] and self.points[src][-1] == self.turn:
                 for d in self.dice:
-                    if self.turn == "White":
-                        dst = src - d
-                    else:
-                        dst = src + d
-
+                    dst = src - d if self.turn == "White" else src + d
                     if 0 <= dst < 24 and self.can_move(src, dst):
                         return True
 
-        # Check bearing off
         if self.all_in_home():
             for src in range(24):
-                if self.points[src] and self.points[src][-1] == self.turn:
-                    if self.can_bear_off(src):
-                        return True
+                if self.can_bear_off(src):
+                    return True
 
         return False
 
     def check_win(self):
+        """Проверка победы"""
         if self.off["White"] == 15:
             return "White"
         if self.off["Black"] == 15:
             return "Black"
         return None
+
 
     def calculate_score(self):
         # Simple scoring: winner gets 1 point per checker left on opponent's board
@@ -528,7 +377,6 @@ def run_game(screen, game_mode, size):
                             game.selected = None
                             print(f"Deselected (cannot move to {idx})")
 
-        # AI move logic
         if game_mode.startswith("ai") and game.turn == "Black" and not ai_thinking and running:
             if not game.dice:
                 # AI needs to roll dice
